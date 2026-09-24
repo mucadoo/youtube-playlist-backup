@@ -1,6 +1,8 @@
 # youtube-playlist-backup
 
-Daily backup of YouTube playlists to **Google Drive** (default), a **GitHub repo**, or the **local disk**.
+Daily backup of YouTube playlists, uploads, liked videos and subscriptions to **Google Drive** (default),
+a **GitHub repo**, or the **local disk**. Back up specific playlists, everything on your account, everything
+public on any channel, or any mix of these.
 Records are never dropped: when YouTube deletes or privates a video, the backup keeps its last known
 title and channel so you can still tell what used to be in that slot.
 
@@ -24,7 +26,7 @@ GitHub turns off workflows on new forks until you do this.
 
 ### 3. Get Google credentials
 
-- **Google Drive, private playlists, or `mine`.** You need OAuth: a client id, a client secret and a
+- **Google Drive, private playlists, or anything under `mine`.** You need OAuth: a client id, a client secret and a
   refresh token. Follow [Google setup (OAuth)](#google-setup-oauth). It can all be done in the browser.
 - **Only public or unlisted playlists, saved to GitHub.** An API key is enough. In
   [Google Cloud Console](https://console.cloud.google.com/), create a project, enable the
@@ -48,10 +50,10 @@ In your fork, go to *Settings → Secrets and variables → Actions*.
 
 | Variable            | Example                | Notes |
 | ------------------- | ---------------------- | ----- |
-| `PLAYLIST_IDS`      | `mine,PL0123456789`    | Required. See [What gets backed up](#what-gets-backed-up) |
+| `BACKUP_SOURCES`    | `mine PL0123456789`    | Required. See [What gets backed up](#what-gets-backed-up) |
 | `STORAGE_BACKEND`   | `gdrive`               | `gdrive` (default) or `github` |
 | `BACKUP_FOLDER`     | `Backups/YouTube`      | Folder on Drive, or path in the repo |
-| `BACKUP_FILE_NAME`  | `{playlistId}.json`    | Can use `{playlistId}` and `{playlistTitle}` |
+| `BACKUP_FILE_NAME`  | `{kind}/{id}.json`     | Can use `{id}`, `{title}` and `{kind}`. A `/` makes subfolders |
 | `DELETED_LOG_FILE_NAME` | `deleted_tracks.json` | |
 | `BACKUP_REPOSITORY` | `you/my-backups`       | `github` backend only. Defaults to the fork itself |
 | `BACKUP_BRANCH`     | `main`                 | `github` backend only. Defaults to that repo's default branch |
@@ -81,30 +83,56 @@ npm test
 
 ## What gets backed up
 
-`PLAYLIST_IDS` is a comma-separated list; you can mix these forms:
+`BACKUP_SOURCES` is a list of entries, separated by commas, spaces or new lines. Mix them however you like.
 
-| Entry            | Meaning                                                    | Needs  |
-| ---------------- | ---------------------------------------------------------- | ------ |
-| `PLxxxxxxxx`     | A single playlist                                          | API key for public/unlisted playlists, OAuth for private ones |
-| `mine`           | Every playlist on the signed-in account, private included | OAuth  |
-| `@handle`        | Every public playlist of a channel                         | either |
-| `channel:UCxxxx` | Every public playlist of a channel id                      | either |
+**Specific playlists**
 
-Example: `PLAYLIST_IDS=mine,@someartist,PL0123456789`
+| Entry        | Meaning           | Needs |
+| ------------ | ----------------- | ----- |
+| `PLxxxxxxxx` | A single playlist | API key for public/unlisted playlists, OAuth for private ones you own |
+
+**Everything under a user**
+
+| Entry            | Backs up                                                                      | Needs  |
+| ---------------- | ----------------------------------------------------------------------------- | ------ |
+| `mine`           | All of the signed-in account: playlists (private too), uploads, liked videos, subscriptions | OAuth |
+| `@handle`        | Everything public on that channel: playlists, uploads, subscriptions (skipped if private) | either |
+| `channel:UCxxxx` | Same, by channel id                                                           | either |
+
+**Just some kinds.** Add `:kind` to a user, and join several kinds with `+`. The kinds are `playlists`, `uploads`,
+`liked` and `subscriptions`. `liked` only works with `mine`, because YouTube doesn't expose other people's likes.
+
+**Exclusions.** Put `!` in front of any entry to leave it out.
+
+Examples:
+
+```bash
+BACKUP_SOURCES=PL0123456789,PLabcdefghij          # just these two playlists
+BACKUP_SOURCES=mine                                # everything on my account
+BACKUP_SOURCES=mine !mine:subscriptions !PLjunk    # everything on my account except subscriptions and one playlist
+BACKUP_SOURCES=mine:playlists+liked @someartist:uploads PL0123456789   # a mix
+```
+
+YouTube's API doesn't expose Watch Later, watch history, or playlists you saved from other people, so those
+can't be backed up. To include one of those saved playlists, add its id as a specific playlist.
+
+`PLAYLIST_IDS` is the old name for `BACKUP_SOURCES` and still works.
 
 ## Output
 
-For each playlist, `BACKUP_FOLDER/BACKUP_FILE_NAME` holds:
+Each playlist, uploads list, liked-videos list or subscriptions list becomes one file, at
+`BACKUP_FOLDER/BACKUP_FILE_NAME`:
 
 ```json
 {
-  "playlistId": "PL...",
+  "id": "PL...",
+  "kind": "playlist",
   "title": "Road trip",
-  "channel": "me",
+  "owner": "me",
   "updatedAt": "2026-09-23T04:17:02.000Z",
   "items": [
     {
-      "playlistItemId": "UEw...",
+      "itemId": "UEw...",
       "videoId": "dQw4w9WgXcQ",
       "title": "Rick Astley - Never Gonna Give You Up",
       "channel": "Rick Astley",
@@ -119,13 +147,20 @@ For each playlist, `BACKUP_FOLDER/BACKUP_FILE_NAME` holds:
 }
 ```
 
+| `kind`          | `id`                                       | Items |
+| --------------- | ------------------------------------------ | ----- |
+| `playlist`      | the playlist id                            | videos |
+| `uploads`       | the channel's uploads playlist id (`UU…`)  | videos |
+| `liked`         | `liked`                                    | videos, newest like first. `addedAt` is empty because the API doesn't say when a video was liked |
+| `subscriptions` | `subscriptions` for yours, `subscriptions-UC…` for another channel | channels. `videoId` is empty, `title` is the channel name |
+
 `status` is one of:
 - `active`: the video is playable.
 - `unavailable`: still in the playlist, but YouTube shows it as "Deleted video" or "Private video". The old title and channel are kept.
-- `removed`: no longer in the playlist.
+- `removed`: no longer in the list. A deleted video disappears from liked videos entirely, so there it shows up as `removed`, still with its title.
 
-Whenever a track moves from `active` to one of the others, an entry is added to `DELETED_LOG_FILE_NAME`
-in the same folder. A file is written only when its content changed.
+Whenever an item moves from `active` to one of the others, an entry is added to `DELETED_LOG_FILE_NAME`
+in the backup folder. A file is written only when its content changed.
 
 ## Configuration
 
@@ -135,12 +170,13 @@ Copy `.env.example` to `.env`. The main variables:
 | ----------------------- | ----------------------------------------------------- | ----- |
 | `STORAGE_BACKEND`       | `gdrive`                                              | `gdrive`, `github` or `local` |
 | `BACKUP_FOLDER`         | `YouTube Playlist Backup` (gdrive), `data` (others)   | A `/`-separated path, created if missing |
-| `BACKUP_FILE_NAME`      | `{playlistId}.json`                                   | Placeholders: `{playlistId}`, `{playlistTitle}` |
+| `BACKUP_SOURCES`        |                                                       | Required. See [What gets backed up](#what-gets-backed-up) |
+| `BACKUP_FILE_NAME`      | `{id}.json`                                           | Placeholders: `{id}`, `{title}`, `{kind}`. A `/` makes subfolders, e.g. `{kind}/{id}.json` |
 | `DELETED_LOG_FILE_NAME` | `deleted_tracks.json`                                 | |
 | `GDRIVE_PARENT_FOLDER_ID` | `root`                                              | Where `BACKUP_FOLDER` is created |
 | `GITHUB_REPOSITORY`, `GITHUB_TOKEN`, `GITHUB_BRANCH` | | For the `github` backend. `GITHUB_BRANCH` defaults to the repo's default branch |
 
-> Prefer `{playlistId}` in the file name. If you use `{playlistTitle}` and then rename the playlist,
+> Prefer `{id}` in the file name. If you use `{title}` and then rename the playlist,
 > the next run starts a new file and its history is not carried over.
 
 ## Google setup (OAuth)
@@ -183,7 +219,7 @@ If you only back up public or unlisted playlists to GitHub or the local disk, a 
 `.github/workflows/backup.yml` runs every day and can also be started by hand. Set these in the repo settings:
 
 - **Secrets:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` (or `YOUTUBE_API_KEY`)
-- **Variables:** `PLAYLIST_IDS`, plus any of `STORAGE_BACKEND`, `BACKUP_FOLDER`, `BACKUP_FILE_NAME`,
+- **Variables:** `BACKUP_SOURCES`, plus any of `STORAGE_BACKEND`, `BACKUP_FOLDER`, `BACKUP_FILE_NAME`,
   `DELETED_LOG_FILE_NAME` and `GDRIVE_PARENT_FOLDER_ID`
 
 For `STORAGE_BACKEND=github`, the job commits into this same repo by default, using the built-in token.
@@ -193,6 +229,6 @@ Each run makes at most one commit, and only when something changed.
 
 ## Quota
 
-Reading a playlist costs 1 unit per 50 videos, plus 1 unit for the playlist's metadata. Expanding
-`mine` or a channel costs 1 unit per 50 playlists. The free daily quota is 10,000 units, far more than
+Reading a playlist or uploads list costs 1 unit per 50 videos, plus 1 unit for its metadata. Liked videos and
+subscriptions cost 1 unit per 50 items. Expanding a user costs 1 unit, plus 1 per 50 playlists. The free daily quota is 10,000 units, far more than
 this needs.

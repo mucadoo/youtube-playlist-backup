@@ -8,7 +8,7 @@ const quote = (s: string) => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'
 
 export class GoogleDriveStorage implements Storage {
   private readonly drive: drive_v3.Drive;
-  private folderId: Promise<string> | undefined;
+  private readonly folderIds = new Map<string, Promise<string>>();
 
   constructor(
     auth: OAuth2Client,
@@ -31,8 +31,9 @@ export class GoogleDriveStorage implements Storage {
     if (id) {
       await this.drive.files.update({ fileId: id, media, supportsAllDrives: true });
     } else {
+      const { dir, name } = splitPath(fileName);
       await this.drive.files.create({
-        requestBody: { name: fileName, parents: [await this.folder()], mimeType: "application/json" },
+        requestBody: { name, parents: [await this.folder(dir)], mimeType: "application/json" },
         media,
         fields: "id",
         supportsAllDrives: true,
@@ -47,7 +48,8 @@ export class GoogleDriveStorage implements Storage {
   }
 
   private async findFile(fileName: string): Promise<string | null> {
-    return this.findChild(await this.folder(), fileName, false);
+    const { dir, name } = splitPath(fileName);
+    return this.findChild(await this.folder(dir), name, false);
   }
 
   private async findChild(parentId: string, name: string, isFolder: boolean): Promise<string | null> {
@@ -67,12 +69,21 @@ export class GoogleDriveStorage implements Storage {
     return res.data.files?.[0]?.id ?? null;
   }
 
-  /** Resolves (creating as needed) the folder path once per run. */
-  private folder(): Promise<string> {
-    this.folderId ??= (async () => {
-      let parent = this.parentFolderId;
-      for (const name of this.folderPath.split("/").filter(Boolean)) {
-        parent =
+  /** Id of BACKUP_FOLDER/subPath, creating folders as needed. */
+  private folder(subPath = ""): Promise<string> {
+    return this.resolveFolder([this.folderPath, subPath].join("/").split("/").filter(Boolean).join("/"));
+  }
+
+  /** path is relative to the parent folder id; each path is looked up at most once per run. */
+  private resolveFolder(path: string): Promise<string> {
+    if (!path) return Promise.resolve(this.parentFolderId);
+    let id = this.folderIds.get(path);
+    if (!id) {
+      const slash = path.lastIndexOf("/");
+      const name = path.slice(slash + 1);
+      id = (async () => {
+        const parent = await this.resolveFolder(slash === -1 ? "" : path.slice(0, slash));
+        return (
           (await this.findChild(parent, name, true)) ??
           (
             await this.drive.files.create({
@@ -80,10 +91,16 @@ export class GoogleDriveStorage implements Storage {
               fields: "id",
               supportsAllDrives: true,
             })
-          ).data.id!;
-      }
-      return parent;
-    })();
-    return this.folderId;
+          ).data.id!
+        );
+      })();
+      this.folderIds.set(path, id);
+    }
+    return id;
   }
+}
+
+function splitPath(filePath: string): { dir: string; name: string } {
+  const parts = filePath.split("/").filter(Boolean);
+  return { name: parts.pop() ?? "", dir: parts.join("/") };
 }

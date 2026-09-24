@@ -1,3 +1,6 @@
+import { needsOAuth, parseSources } from "./sources.js";
+import type { CollectionKind } from "./types.js";
+
 export type StorageBackend = "gdrive" | "github" | "local";
 
 function env(name: string): string | undefined {
@@ -34,24 +37,22 @@ export function loadConfig() {
     throw new Error("The gdrive backend needs GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN");
   }
 
-  const playlistIds = (env("PLAYLIST_IDS") ?? "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
-  if (playlistIds.length === 0) throw new Error("PLAYLIST_IDS is empty");
-  if (playlistIds.includes("mine") && !oauth) {
-    throw new Error('PLAYLIST_IDS=mine requires OAuth credentials (an API key cannot see your account)');
+  // PLAYLIST_IDS is the old name, still accepted.
+  const sources = parseSources(env("BACKUP_SOURCES") ?? env("PLAYLIST_IDS") ?? "");
+  if (!sources.some((s) => !s.exclude)) throw new Error("BACKUP_SOURCES is empty");
+  if (needsOAuth(sources) && !oauth) {
+    throw new Error('"mine" sources require OAuth credentials (an API key cannot see your account)');
   }
 
   return {
     backend,
-    playlistIds,
+    sources,
     youtubeApiKey,
     oauth,
     /** Folder the backup files go into. A "/"-separated path; created if missing. */
     folder: env("BACKUP_FOLDER") ?? (backend === "gdrive" ? "YouTube Playlist Backup" : "data"),
-    /** Per-playlist file name. Supports {playlistId} and {playlistTitle}. */
-    fileNameTemplate: env("BACKUP_FILE_NAME") ?? "{playlistId}.json",
+    /** Per-collection file name. Supports {id}, {title} and {kind}; may contain "/" for subfolders. */
+    fileNameTemplate: env("BACKUP_FILE_NAME") ?? "{id}.json",
     deletedLogFileName: env("DELETED_LOG_FILE_NAME") ?? "deleted_tracks.json",
     gdrive: {
       parentFolderId: env("GDRIVE_PARENT_FOLDER_ID") ?? "root",
@@ -67,7 +68,15 @@ export function loadConfig() {
 
 export type Config = ReturnType<typeof loadConfig>;
 
-export function renderFileName(template: string, vars: { playlistId: string; playlistTitle: string }): string {
-  const safeTitle = vars.playlistTitle.replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").trim() || vars.playlistId;
-  return template.replaceAll("{playlistId}", vars.playlistId).replaceAll("{playlistTitle}", safeTitle);
+export function renderFileName(template: string, vars: { id: string; title: string; kind: CollectionKind }): string {
+  const safeTitle = vars.title.replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").trim() || vars.id;
+  return (
+    template
+      .replaceAll("{id}", vars.id)
+      .replaceAll("{title}", safeTitle)
+      .replaceAll("{kind}", vars.kind)
+      // Old placeholder names.
+      .replaceAll("{playlistId}", vars.id)
+      .replaceAll("{playlistTitle}", safeTitle)
+  );
 }

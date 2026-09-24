@@ -25,7 +25,7 @@ jobs:
       - run: npm run build
       - run: node dist/index.js
         env:
-          PLAYLIST_IDS: ${{ vars.PLAYLIST_IDS }}
+          BACKUP_SOURCES: ${{ vars.BACKUP_SOURCES || vars.PLAYLIST_IDS }}
           STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'gdrive' }}
           BACKUP_FOLDER: ${{ vars.BACKUP_FOLDER }}
           BACKUP_FILE_NAME: ${{ vars.BACKUP_FILE_NAME }}

@@ -1,3 +1,4 @@
+/** File paths are relative to the backup folder and may contain "/" for subfolders. */
 export interface Storage {
   /** Returns the file contents, or null if it does not exist yet. */
   read(fileName: string): Promise<string | null>;

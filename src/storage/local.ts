@@ -15,8 +15,9 @@ export class LocalStorage implements Storage {
   }
 
   async write(fileName: string, content: string): Promise<void> {
-    await mkdir(this.folder, { recursive: true });
-    await writeFile(path.join(this.folder, fileName), content);
+    const file = path.join(this.folder, fileName);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, content);
   }
 
   async flush(): Promise<void> {}
