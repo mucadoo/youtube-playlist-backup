@@ -1,8 +1,8 @@
-import type { BackupItem, CollectionBackup, DeletionEvent, FetchedCollection } from "./types.js";
+import type { BackupItem, CollectionBackup, StatusChange, FetchedCollection } from "./types.js";
 
 export interface MergeResult {
   backup: CollectionBackup;
-  events: DeletionEvent[];
+  events: StatusChange[];
   changed: boolean;
 }
 
@@ -13,7 +13,7 @@ export interface MergeResult {
  */
 export function mergeCollection(previous: CollectionBackup | null, fetched: FetchedCollection, now: string): MergeResult {
   const prevById = new Map((previous?.items ?? []).map((t) => [t.itemId, t]));
-  const events: DeletionEvent[] = [];
+  const events: StatusChange[] = [];
   const next: BackupItem[] = [];
 
   const flag = (item: BackupItem) => {

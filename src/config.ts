@@ -44,24 +44,34 @@ export function loadConfig() {
     throw new Error('"mine" sources require OAuth credentials (an API key cannot see your account)');
   }
 
+  // BACKUP_GDRIVE_FOLDER, BACKUP_GITHUB_FILE_NAME, ... override the shared BACKUP_FOLDER / BACKUP_FILE_NAME.
+  const prefix = backend.toUpperCase();
+  const perBackend = (name: string) => env(`BACKUP_${prefix}_${name}`) ?? env(`BACKUP_${name}`);
+  const githubVar = (name: string, isRequired = false) => {
+    const value = env(`BACKUP_GITHUB_${name}`) ?? env(`GITHUB_${name}`);
+    if (isRequired && !value) throw new Error(`Missing required environment variable BACKUP_GITHUB_${name}`);
+    return value;
+  };
+
   return {
     backend,
     sources,
     youtubeApiKey,
     oauth,
-    /** Folder the backup files go into. A "/"-separated path; created if missing. */
-    folder: env("BACKUP_FOLDER") ?? (backend === "gdrive" ? "YouTube Playlist Backup" : "data"),
+    /** Folder the backup files go into. A "/"-separated path, created if missing; "/" means the top level. */
+    folder: perBackend("FOLDER") ?? (backend === "gdrive" ? "YouTube Playlist Backup" : "data"),
     /** Per-collection file name. Supports {id}, {title} and {kind}; may contain "/" for subfolders. */
-    fileNameTemplate: env("BACKUP_FILE_NAME") ?? "{id}.json",
-    deletedLogFileName: env("DELETED_LOG_FILE_NAME") ?? "deleted_tracks.json",
+    fileNameTemplate: perBackend("FILE_NAME") ?? "{id}.json",
     gdrive: {
       parentFolderId: env("GDRIVE_PARENT_FOLDER_ID") ?? "root",
     },
+    // BACKUP_GITHUB_* names work in Actions, where GITHUB_* secrets/variables are reserved.
     github: {
-      token: backend === "github" ? required("GITHUB_TOKEN") : "",
-      repository: backend === "github" ? required("GITHUB_REPOSITORY") : "",
-      branch: env("GITHUB_BRANCH"),
-      commitMessage: env("GITHUB_COMMIT_MESSAGE") ?? "chore: update playlist backup",
+      token: backend === "github" ? githubVar("TOKEN", true)! : "",
+      repository: backend === "github" ? githubVar("REPOSITORY", true)! : "",
+      /** Created (as a branch holding only the backups) if it doesn't exist. Default: the repo's default branch. */
+      branch: githubVar("BRANCH"),
+      commitMessage: githubVar("COMMIT_MESSAGE") ?? "chore: update playlist backup",
     },
   };
 }

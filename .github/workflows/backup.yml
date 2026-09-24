@@ -27,16 +27,22 @@ jobs:
         env:
           BACKUP_SOURCES: ${{ vars.BACKUP_SOURCES || vars.PLAYLIST_IDS }}
           STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'gdrive' }}
+          # Shared by every backend; BACKUP_GDRIVE_* / BACKUP_GITHUB_* override them per backend.
           BACKUP_FOLDER: ${{ vars.BACKUP_FOLDER }}
           BACKUP_FILE_NAME: ${{ vars.BACKUP_FILE_NAME }}
-          DELETED_LOG_FILE_NAME: ${{ vars.DELETED_LOG_FILE_NAME }}
-          GDRIVE_PARENT_FOLDER_ID: ${{ vars.GDRIVE_PARENT_FOLDER_ID }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          # Google Drive backend
+          BACKUP_GDRIVE_FOLDER: ${{ vars.BACKUP_GDRIVE_FOLDER }}
+          BACKUP_GDRIVE_FILE_NAME: ${{ vars.BACKUP_GDRIVE_FILE_NAME }}
+          GDRIVE_PARENT_FOLDER_ID: ${{ vars.GDRIVE_PARENT_FOLDER_ID }}
           # GitHub backend: defaults to committing into this repo with the workflow token.
-          # For a separate private data repo, set vars.BACKUP_REPOSITORY and secrets.BACKUP_GITHUB_TOKEN (a PAT).
-          GITHUB_TOKEN: ${{ secrets.BACKUP_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ vars.BACKUP_REPOSITORY || github.repository }}
-          GITHUB_BRANCH: ${{ vars.BACKUP_BRANCH }}
+          # For a separate private repo, set vars.BACKUP_GITHUB_REPOSITORY and secrets.BACKUP_GITHUB_TOKEN (a PAT).
+          BACKUP_GITHUB_TOKEN: ${{ secrets.BACKUP_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          BACKUP_GITHUB_REPOSITORY: ${{ vars.BACKUP_GITHUB_REPOSITORY || github.repository }}
+          BACKUP_GITHUB_BRANCH: ${{ vars.BACKUP_GITHUB_BRANCH }}
+          BACKUP_GITHUB_FOLDER: ${{ vars.BACKUP_GITHUB_FOLDER }}
+          BACKUP_GITHUB_FILE_NAME: ${{ vars.BACKUP_GITHUB_FILE_NAME }}
+          BACKUP_GITHUB_COMMIT_MESSAGE: ${{ vars.BACKUP_GITHUB_COMMIT_MESSAGE }}

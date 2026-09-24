@@ -2,7 +2,7 @@ import { loadConfig, renderFileName } from "./config.js";
 import { mergeCollection } from "./diff.js";
 import { oauthClient } from "./google-auth.js";
 import { createStorage } from "./storage/index.js";
-import type { CollectionBackup, DeletionEvent } from "./types.js";
+import type { CollectionBackup, StatusChange } from "./types.js";
 import { fetchCollection, resolveSources, youtubeClient } from "./youtube.js";
 
 const toJson = (value: unknown) => JSON.stringify(value, null, 2) + "\n";
@@ -23,7 +23,7 @@ async function main() {
   console.log(`Backing up to ${storage.describe()}`);
   const { refs, failed } = await resolveSources(yt, config.sources);
   for (const { source, error } of failed) console.error(`✗ ${source}:`, errorMessage(error));
-  const allEvents: DeletionEvent[] = [];
+  const allEvents: StatusChange[] = [];
   let done = 0;
   let failures = failed.length;
 
@@ -62,9 +62,7 @@ async function main() {
   }
 
   if (allEvents.length > 0) {
-    const raw = await storage.read(config.deletedLogFileName);
-    const log = raw ? (JSON.parse(raw) as DeletionEvent[]) : [];
-    await storage.write(config.deletedLogFileName, toJson([...log, ...allEvents]));
+    console.log("Newly gone:");
     for (const e of allEvents) {
       console.log(`  - [${e.reason}] ${e.item.title} — ${e.item.channel ?? "?"} (${e.item.videoId ?? e.item.itemId}) in ${e.collectionTitle}`);
     }

@@ -27,7 +27,8 @@ export interface CollectionBackup {
   items: BackupItem[];
 }
 
-export interface DeletionEvent {
+/** An item that stopped being active during this run. Only reported in the run log; the backup file's status fields hold the record. */
+export interface StatusChange {
   detectedAt: string;
   collectionId: string;
   collectionKind: CollectionKind;

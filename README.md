@@ -54,9 +54,10 @@ In your fork, go to *Settings → Secrets and variables → Actions*.
 | `STORAGE_BACKEND`   | `gdrive`               | `gdrive` (default) or `github` |
 | `BACKUP_FOLDER`     | `Backups/YouTube`      | Folder on Drive, or path in the repo |
 | `BACKUP_FILE_NAME`  | `{kind}/{id}.json`     | Can use `{id}`, `{title}` and `{kind}`. A `/` makes subfolders |
-| `DELETED_LOG_FILE_NAME` | `deleted_tracks.json` | |
-| `BACKUP_REPOSITORY` | `you/my-backups`       | `github` backend only. Defaults to the fork itself |
-| `BACKUP_BRANCH`     | `main`                 | `github` backend only. Defaults to that repo's default branch |
+| `BACKUP_GITHUB_REPOSITORY` | `you/my-backups` | `github` backend only. Defaults to the fork itself |
+| `BACKUP_GITHUB_BRANCH`     | `backups`        | `github` backend only. Created if missing. Defaults to the repo's default branch |
+
+The `github` backend has more options, such as its own folder and file name. See [GitHub backend](#github-backend).
 
 ### 5. Run it
 
@@ -159,8 +160,9 @@ Each playlist, uploads list, liked-videos list or subscriptions list becomes one
 - `unavailable`: still in the playlist, but YouTube shows it as "Deleted video" or "Private video". The old title and channel are kept.
 - `removed`: no longer in the list. A deleted video disappears from liked videos entirely, so there it shows up as `removed`, still with its title.
 
-Whenever an item moves from `active` to one of the others, an entry is added to `DELETED_LOG_FILE_NAME`
-in the backup folder. A file is written only when its content changed.
+Gone items stay in the file, with `statusChangedAt` recording when the change was detected. There's no
+separate log of deleted items: to find everything that's gone, look for items whose `status` isn't `active`.
+The run log also lists anything that went away during that run. A file is written only when its content changed.
 
 ## Configuration
 
@@ -169,15 +171,44 @@ Copy `.env.example` to `.env`. The main variables:
 | Variable                | Default                                               | Notes |
 | ----------------------- | ----------------------------------------------------- | ----- |
 | `STORAGE_BACKEND`       | `gdrive`                                              | `gdrive`, `github` or `local` |
-| `BACKUP_FOLDER`         | `YouTube Playlist Backup` (gdrive), `data` (others)   | A `/`-separated path, created if missing |
+| `BACKUP_FOLDER`         | `YouTube Playlist Backup` (gdrive), `data` (others)   | A `/`-separated path, created if missing. `/` means the top level |
 | `BACKUP_SOURCES`        |                                                       | Required. See [What gets backed up](#what-gets-backed-up) |
 | `BACKUP_FILE_NAME`      | `{id}.json`                                           | Placeholders: `{id}`, `{title}`, `{kind}`. A `/` makes subfolders, e.g. `{kind}/{id}.json` |
-| `DELETED_LOG_FILE_NAME` | `deleted_tracks.json`                                 | |
 | `GDRIVE_PARENT_FOLDER_ID` | `root`                                              | Where `BACKUP_FOLDER` is created |
-| `GITHUB_REPOSITORY`, `GITHUB_TOKEN`, `GITHUB_BRANCH` | | For the `github` backend. `GITHUB_BRANCH` defaults to the repo's default branch |
+| `BACKUP_GDRIVE_FOLDER`, `BACKUP_GDRIVE_FILE_NAME` | | Override `BACKUP_FOLDER` / `BACKUP_FILE_NAME` for Drive only |
+| `BACKUP_GITHUB_*`       |                                                       | GitHub backend settings. See [GitHub backend](#github-backend) |
 
 > Prefer `{id}` in the file name. If you use `{title}` and then rename the playlist,
 > the next run starts a new file and its history is not carried over.
+
+### GitHub backend
+
+Every setting can be given as `BACKUP_GITHUB_*`, which takes priority over the shared ones.
+
+| Variable                              | Default                        | Notes |
+| ------------------------------------- | ------------------------------ | ----- |
+| `BACKUP_GITHUB_REPOSITORY`            | the repo running the workflow  | `owner/repo`. Required when running locally |
+| `BACKUP_GITHUB_TOKEN`                 | the workflow's token           | Needs *Contents: read and write* on that repo. Required when running locally |
+| `BACKUP_GITHUB_BRANCH`                | the repo's default branch      | If the branch doesn't exist, it's created with no history, holding only the backups |
+| `BACKUP_GITHUB_FOLDER`                | `BACKUP_FOLDER`, else `data`   | Path inside the repo. `/` means the repo root |
+| `BACKUP_GITHUB_FILE_NAME`             | `BACKUP_FILE_NAME`, else `{id}.json` | Same placeholders; `/` makes subfolders |
+| `BACKUP_GITHUB_COMMIT_MESSAGE`        | `chore: update playlist backup` | |
+
+When running locally, the plain `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_BRANCH` and `GITHUB_COMMIT_MESSAGE`
+also work. In Actions, use the `BACKUP_GITHUB_*` names, because GitHub reserves `GITHUB_*`.
+
+Example: to keep the backups on a separate `backups` branch of your fork, with one folder per kind at the top level:
+
+```bash
+STORAGE_BACKEND=github
+BACKUP_GITHUB_BRANCH=backups
+BACKUP_GITHUB_FOLDER=/
+BACKUP_GITHUB_FILE_NAME={kind}/{id}.json
+```
+
+Each run makes at most one commit, and only when something changed. A brand-new repo with no commits
+can't be written to through GitHub's API, so if you use a separate data repo, tick **Add a README** when
+you create it.
 
 ## Google setup (OAuth)
 
@@ -219,13 +250,12 @@ If you only back up public or unlisted playlists to GitHub or the local disk, a 
 `.github/workflows/backup.yml` runs every day and can also be started by hand. Set these in the repo settings:
 
 - **Secrets:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` (or `YOUTUBE_API_KEY`)
-- **Variables:** `BACKUP_SOURCES`, plus any of `STORAGE_BACKEND`, `BACKUP_FOLDER`, `BACKUP_FILE_NAME`,
-  `DELETED_LOG_FILE_NAME` and `GDRIVE_PARENT_FOLDER_ID`
+- **Variables:** `BACKUP_SOURCES`, plus any of the settings in [Configuration](#configuration), such as
+  `STORAGE_BACKEND`, `BACKUP_FOLDER`, `BACKUP_FILE_NAME`, `BACKUP_GDRIVE_*` or `BACKUP_GITHUB_*`
 
 For `STORAGE_BACKEND=github`, the job commits into this same repo by default, using the built-in token.
-To write to a separate private data repo, set the variable `BACKUP_REPOSITORY=owner/repo` and the secret
+To write to a separate private data repo, set the variable `BACKUP_GITHUB_REPOSITORY=owner/repo` and the secret
 `BACKUP_GITHUB_TOKEN`, a fine-grained PAT with *Contents: read and write* on that repo.
-Each run makes at most one commit, and only when something changed.
 
 ## Quota
 
