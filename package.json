@@ -1,0 +1,29 @@
+{
+  "name": "youtube-playlist-backup",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.9"
+  },
+  "scripts": {
+    "build": "tsc",
+    "backup": "tsx --env-file-if-exists=.env src/index.ts",
+    "auth": "tsx --env-file-if-exists=.env src/auth.ts",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@googleapis/drive": "^26.0.1",
+    "@googleapis/youtube": "^39.0.1",
+    "@octokit/rest": "^22.0.1",
+    "google-auth-library": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

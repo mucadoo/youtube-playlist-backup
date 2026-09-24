@@ -1,0 +1,42 @@
+name: Backup YouTube playlists
+
+on:
+  schedule:
+    - cron: "17 4 * * *" # daily, 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write # only needed when STORAGE_BACKEND=github targets this repo
+
+concurrency:
+  group: playlist-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node dist/index.js
+        env:
+          PLAYLIST_IDS: ${{ vars.PLAYLIST_IDS }}
+          STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'gdrive' }}
+          BACKUP_FOLDER: ${{ vars.BACKUP_FOLDER }}
+          BACKUP_FILE_NAME: ${{ vars.BACKUP_FILE_NAME }}
+          DELETED_LOG_FILE_NAME: ${{ vars.DELETED_LOG_FILE_NAME }}
+          GDRIVE_PARENT_FOLDER_ID: ${{ vars.GDRIVE_PARENT_FOLDER_ID }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          # GitHub backend: defaults to committing into this repo with the workflow token.
+          # For a separate private data repo, set vars.BACKUP_REPOSITORY and secrets.BACKUP_GITHUB_TOKEN (a PAT).
+          GITHUB_TOKEN: ${{ secrets.BACKUP_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ vars.BACKUP_REPOSITORY || github.repository }}
+          GITHUB_BRANCH: ${{ vars.BACKUP_BRANCH }}
