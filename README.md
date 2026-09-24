@@ -61,7 +61,7 @@ In your fork, go to *Settings → Secrets and variables → Actions*.
 ### 5. Run it
 
 In the **Actions** tab, open **Backup YouTube playlists** and click **Run workflow**. Check the log: it lists
-each playlist and the file it wrote. After that it runs every day at 04:17 UTC. To change the time, edit the
+each playlist and the file it wrote. After that it runs every day at midnight UTC. To change the time, edit the
 `cron` line in `.github/workflows/backup.yml`.
 
 > GitHub disables scheduled workflows in public repos after 60 days without any repo activity, and emails
