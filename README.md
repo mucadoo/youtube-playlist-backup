@@ -4,6 +4,81 @@ Daily backup of YouTube playlists to **Google Drive** (default), a **GitHub repo
 Records are never dropped: when YouTube deletes or privates a video, the backup keeps its last known
 title and channel so you can still tell what used to be in that slot.
 
+## Getting started
+
+The whole thing runs in GitHub Actions on your own copy of this repo. You don't need to install anything locally.
+
+### 1. Get your own copy of the repo
+
+Click **Fork** at the top of this page. Your fork runs the backup with your credentials.
+
+> Forks of public repos are public. That's fine for Google Drive, because the backup files go to your Drive
+> and your credentials stay in encrypted secrets. If you'll store the backups **in GitHub**, keep them private:
+> either write them to a separate private repo (see step 4), or use *New repository → Import a repository*
+> with this repo's URL to make a private copy instead of forking.
+
+### 2. Enable Actions on your fork
+
+Open the **Actions** tab of your fork and click **I understand my workflows, go ahead and enable them**.
+GitHub turns off workflows on new forks until you do this.
+
+### 3. Get Google credentials
+
+- **Google Drive, private playlists, or `mine`.** You need OAuth: a client id, a client secret and a
+  refresh token. Follow [Google setup (OAuth)](#google-setup-oauth). It can all be done in the browser.
+- **Only public or unlisted playlists, saved to GitHub.** An API key is enough. In
+  [Google Cloud Console](https://console.cloud.google.com/), create a project, enable the
+  **YouTube Data API v3**, then go to *APIs & Services → Credentials → Create credentials → API key*.
+
+### 4. Add secrets and variables
+
+In your fork, go to *Settings → Secrets and variables → Actions*.
+
+**Secrets** tab. Add the ones for your setup:
+
+| Secret                 | When |
+| ---------------------- | ---- |
+| `GOOGLE_CLIENT_ID`     | OAuth |
+| `GOOGLE_CLIENT_SECRET` | OAuth |
+| `GOOGLE_REFRESH_TOKEN` | OAuth |
+| `YOUTUBE_API_KEY`      | API key setup only |
+| `BACKUP_GITHUB_TOKEN`  | Only if the backups go to a *different* GitHub repo. Use a fine-grained PAT with *Contents: read and write* on that repo |
+
+**Variables** tab:
+
+| Variable            | Example                | Notes |
+| ------------------- | ---------------------- | ----- |
+| `PLAYLIST_IDS`      | `mine,PL0123456789`    | Required. See [What gets backed up](#what-gets-backed-up) |
+| `STORAGE_BACKEND`   | `gdrive`               | `gdrive` (default) or `github` |
+| `BACKUP_FOLDER`     | `Backups/YouTube`      | Folder on Drive, or path in the repo |
+| `BACKUP_FILE_NAME`  | `{playlistId}.json`    | Can use `{playlistId}` and `{playlistTitle}` |
+| `DELETED_LOG_FILE_NAME` | `deleted_tracks.json` | |
+| `BACKUP_REPOSITORY` | `you/my-backups`       | `github` backend only. Defaults to the fork itself |
+| `BACKUP_BRANCH`     | `main`                 | `github` backend only. Defaults to that repo's default branch |
+
+### 5. Run it
+
+In the **Actions** tab, open **Backup YouTube playlists** and click **Run workflow**. Check the log: it lists
+each playlist and the file it wrote. After that it runs every day at 04:17 UTC. To change the time, edit the
+`cron` line in `.github/workflows/backup.yml`.
+
+> GitHub disables scheduled workflows in public repos after 60 days without any repo activity, and emails
+> you when it does. With the Drive backend, nothing gets committed, so this can happen. If it does, click
+> **Enable workflow** on the Actions tab.
+
+### Running locally (optional)
+
+Useful for trying things out or for getting the OAuth refresh token with `npm run auth`. Needs Node.js 22.9+.
+
+```bash
+git clone https://github.com/<your-user>/youtube-playlist-backup.git
+cd youtube-playlist-backup
+npm install
+cp .env.example .env   # fill in the same values as the secrets/variables above
+npm run backup         # STORAGE_BACKEND=local writes to ./data instead
+npm test
+```
+
 ## What gets backed up
 
 `PLAYLIST_IDS` is a comma-separated list; you can mix these forms:
@@ -72,26 +147,36 @@ Copy `.env.example` to `.env`. The main variables:
 
 You need OAuth for Drive, for `mine`, and for private playlists.
 
-1. In Google Cloud Console, create a project and enable the **YouTube Data API v3** and the **Google Drive API**.
-2. Set up the OAuth consent screen and add yourself as a test user. Then **publish the app** (to "In production").
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project. Under *APIs & Services → Library*,
+   enable the **YouTube Data API v3** and the **Google Drive API**.
+2. Set up the OAuth consent screen (*Google Auth Platform*). Choose *External* and add your own Google account
+   as a test user. Then go to *Audience* and click **Publish app** (to "In production").
    Refresh tokens for apps left in "Testing" expire after 7 days. An unverified app is fine for personal use;
-   you'll just click through a warning when you sign in.
-3. Create an OAuth client of type **Desktop app**. Put its id and secret in `.env`.
-4. Run `npm run auth`, open the URL it prints, and approve. Copy the printed `GOOGLE_REFRESH_TOKEN` into `.env`.
+   you'll just click through a "Google hasn't verified this app" warning when you sign in.
+3. Get a refresh token. Pick one:
+
+   **In the browser (no install).**
+   1. Create an OAuth client (*Clients → Create client*) of type **Web application**. Add
+      `https://developers.google.com/oauthplayground` as an authorized redirect URI.
+   2. Open the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground). Click the gear icon, tick
+      **Use your own OAuth credentials**, and paste in the client id and secret.
+   3. In the *Input your own scopes* box, enter
+      `https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/drive.file`.
+      Then click **Authorize APIs**, sign in, and approve.
+   4. Click **Exchange authorization code for tokens** and copy the **Refresh token**.
+
+   **Locally.**
+   1. Create an OAuth client of type **Desktop app**.
+   2. Put its id and secret in `.env`, run `npm run auth`, open the URL it prints, and approve.
+      It prints `GOOGLE_REFRESH_TOKEN=...`.
+4. Save the client id, client secret and refresh token as the `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
+   `GOOGLE_REFRESH_TOKEN` secrets. Put them in `.env` too if you also run it locally.
 
 Scopes: `youtube.readonly` and `drive.file`. With `drive.file` the app can only see files and folders it
 created itself. So let it create `BACKUP_FOLDER`; don't point `GDRIVE_PARENT_FOLDER_ID` at a folder
 you created by hand, because the app won't be able to see it.
 
 If you only back up public or unlisted playlists to GitHub or the local disk, a `YOUTUBE_API_KEY` is enough.
-
-## Running
-
-```bash
-npm install
-npm run backup   # runs from source, reads .env
-npm test
-```
 
 ## GitHub Actions
 
