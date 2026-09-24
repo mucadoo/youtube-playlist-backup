@@ -96,7 +96,7 @@ npm test
 
 | Entry            | Backs up                                                                      | Needs  |
 | ---------------- | ----------------------------------------------------------------------------- | ------ |
-| `mine`           | All of the signed-in account: playlists (private too), uploads, liked videos, subscriptions | OAuth |
+| `mine`           | All of the signed-in account: playlists (private too), uploads, liked videos, subscriptions. **Not Watch Later**, see [below](#what-mine-includes-and-what-it-cant) | OAuth |
 | `@handle`        | Everything public on that channel: playlists, uploads, subscriptions (skipped if private) | either |
 | `channel:UCxxxx` | Same, by channel id                                                           | either |
 
@@ -114,8 +114,26 @@ BACKUP_SOURCES=mine !mine:subscriptions !PLjunk    # everything on my account ex
 BACKUP_SOURCES=mine:playlists+liked @someartist:uploads PL0123456789   # a mix
 ```
 
-YouTube's API doesn't expose Watch Later, watch history, or playlists you saved from other people, so those
-can't be backed up. To include one of those saved playlists, add its id as a specific playlist.
+### What `mine` includes, and what it can't
+
+| What | Backed up with `mine`? |
+| ---- | ---------------------- |
+| Your public, unlisted and private playlists | ✅ |
+| Liked videos | ✅ saved as `liked` |
+| Your uploads | ✅ (leave them out with `!mine:uploads`) |
+| Your subscriptions | ✅ (leave them out with `!mine:subscriptions`) |
+| **Watch Later** | ❌ not available, see below |
+| Watch history | ❌ not available |
+| Playlists you saved from other people | ❌ not listed by the API. Add each one's id as a specific playlist instead |
+
+**Watch Later can't be backed up.** YouTube blocked API access to Watch Later in 2016; it now comes
+back empty for every app, and nothing in this tool can get around that. Workarounds:
+
+- **Keep it as a normal playlist (recommended).** On YouTube, open Watch Later, then ⋮ → *Add all to…* →
+  a new private playlist. Save new videos there from now on. `mine` backs it up like any other playlist,
+  and deleted videos are tracked too.
+- **Google Takeout.** [Takeout](https://takeout.google.com/) (*YouTube and YouTube Music → playlists*)
+  exports Watch Later as a CSV of video ids. It's a one-off manual export, not part of the daily backup.
 
 `PLAYLIST_IDS` is the old name for `BACKUP_SOURCES` and still works.
 
